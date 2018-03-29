@@ -48,3 +48,7 @@ client.quiesce.begin.useraction=No action is required.
 client.quiesce.end=CWWKE1104I: Client quiesce complete.
 client.quiesce.end.explanation=The quiesce operation completed successfully.
 client.quiesce.end.useraction=No action is required.
+
+warn.did.not.pause.on.shutdown=CWWKE1105W: The pause operation failed with the exception: {0}
+warn.did.not.pause.on.shutdown.explanation=The server attempted to pause a component while shutting down the server but the operation did not complete because of an exception. 
+warn.did.not.pause.on.shutdown.useraction=No action is required.

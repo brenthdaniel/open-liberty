@@ -1332,7 +1332,7 @@ public class ApplicationConfigurator implements ManagedServiceFactory, Introspec
 
         UpdateEpisodeState() throws IllegalStateException {
             appsStoppedNotification = _runtimeUpdateManager.createNotification(RuntimeUpdateNotification.APPLICATIONS_STOPPED);
-            appsStartingNotification = _runtimeUpdateManager.createNotification(RuntimeUpdateNotification.APPLICATIONS_STARTING);
+            appsStartingNotification = _runtimeUpdateManager.createNotification(RuntimeUpdateNotification.APPLICATIONS_STARTING, true);
             appsInstallCalledNotification = _runtimeUpdateManager.createNotification(RuntimeUpdateNotification.APPLICATIONS_INSTALL_CALLED, true);
             //appsStartedNotification = _runtimeUpdateManager.createNotification(RuntimeUpdateNotification.APPLICATIONS_STARTED);
             if (appsStoppedNotification == null || appsStartingNotification == null ||

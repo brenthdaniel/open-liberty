@@ -40,6 +40,7 @@ import org.osgi.service.component.annotations.ReferencePolicy;
 
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.kernel.service.util.CpuInfo;
+import com.ibm.wsspi.kernel.service.utils.ServerQuiesceListener;
 import com.ibm.wsspi.threading.ExecutorServiceTaskInterceptor;
 import com.ibm.wsspi.threading.WSExecutorService;
 
@@ -50,7 +51,7 @@ import com.ibm.wsspi.threading.WSExecutorService;
            configurationPolicy = ConfigurationPolicy.REQUIRE,
            property = "service.vendor=IBM",
            service = { java.util.concurrent.ExecutorService.class, com.ibm.wsspi.threading.WSExecutorService.class })
-public final class ExecutorServiceImpl implements WSExecutorService {
+public final class ExecutorServiceImpl implements WSExecutorService, ServerQuiesceListener {
 
     /**
      * The target ExecutorService.
@@ -104,6 +105,8 @@ public final class ExecutorServiceImpl implements WSExecutorService {
      * The ThreadFactory used by the executor to create new threads.
      */
     ThreadFactory threadFactory = null;
+
+    private boolean serverStopping = false;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL,
                policy = ReferencePolicy.DYNAMIC,
@@ -203,6 +206,44 @@ public final class ExecutorServiceImpl implements WSExecutorService {
 
         if (oldPool != null) {
             softShutdown(oldPool);
+        }
+    }
+
+    private class ShutdownRunnable implements Runnable {
+
+        private final Runnable wrappedTask;
+
+        ShutdownRunnable(Runnable r) {
+            this.wrappedTask = r;
+        }
+
+        /*
+         * (non-Javadoc)
+         *
+         * @see java.lang.Runnable#run()
+         */
+        @Override
+        public void run() {
+            this.wrappedTask.run();
+        }
+
+    }
+
+    private class ShutdownCallable<T> implements Callable<T> {
+        private final Callable<T> callable;
+
+        ShutdownCallable(Callable<T> c) {
+            this.callable = c;
+        }
+
+        /*
+         * (non-Javadoc)
+         * 
+         * @see java.util.concurrent.Callable#call()
+         */
+        @Override
+        public T call() throws Exception {
+            return this.callable.call();
         }
     }
 
@@ -391,6 +432,9 @@ public final class ExecutorServiceImpl implements WSExecutorService {
         while (i.hasNext()) {
             r = i.next().wrap(r);
         }
+        if (serverStopping) {
+            r = new ShutdownRunnable(r);
+        }
         return r;
     }
 
@@ -399,6 +443,9 @@ public final class ExecutorServiceImpl implements WSExecutorService {
         while (i.hasNext()) {
             c = i.next().wrap(c);
         }
+        if (serverStopping) {
+            c = new ShutdownCallable<T>(c);
+        }
         return c;
     }
 
@@ -406,8 +453,103 @@ public final class ExecutorServiceImpl implements WSExecutorService {
         List<Callable<T>> wrappedTasks = new ArrayList<Callable<T>>();
         Iterator<? extends Callable<T>> i = tasks.iterator();
         while (i.hasNext()) {
-            wrappedTasks.add(wrap(i.next()));
+            Callable<T> c = wrap(i.next());
+            if (serverStopping) {
+                c = new ShutdownCallable<T>(c);
+            }
+            wrappedTasks.add(c);
         }
         return wrappedTasks;
     }
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.wsspi.kernel.service.utils.ServerQuiesceListener#serverStopping()
+     */
+    @Override
+    public void serverStopping() {
+        this.serverStopping = true;
+        // set interceptorsActive to true so that tasks get wrapped
+        this.interceptorsActive = true;
+
+    }
+
+//    private static class PausedThreadPool {
+//        private final long keepAlive;
+//        private final int coreThreads;
+//        private final ThreadPoolExecutor pool;
+//
+//        PausedThreadPool(ThreadPoolExecutor pool) {
+//            this.pool = pool;
+//            this.keepAlive = pool.getKeepAliveTime(TimeUnit.SECONDS);
+//            this.coreThreads = pool.getCorePoolSize();
+//        }
+//
+//        void pause() {
+//            pool.setKeepAliveTime(0, TimeUnit.SECONDS);
+//            pool.setCorePoolSize(0);
+//        }
+//
+//        void resume() {
+//            pool.setKeepAliveTime(keepAlive, TimeUnit.SECONDS);
+//            pool.setCorePoolSize(coreThreads);
+//        }
+//    }
+//
+//    private PausedThreadPool pausedThreadPool;
+
+//    /*
+//     * (non-Javadoc)
+//     *
+//     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#getExtendedInfo()
+//     */
+//    @Override
+//    public HashMap<String, String> getExtendedInfo() {
+//        // TODO Auto-generated method stub
+//        return null;
+//    }
+//
+//    /*
+//     * (non-Javadoc)
+//     *
+//     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#getName()
+//     */
+//    @Override
+//    public String getName() {
+//        return "ExecutorServiceImpl";
+//    }
+//
+//    /*
+//     * (non-Javadoc)
+//     *
+//     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#isPaused()
+//     */
+//    @Override
+//    public boolean isPaused() {
+//        return pausedThreadPool != null;
+//    }
+//
+//    /*
+//     * (non-Javadoc)
+//     *
+//     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#pause()
+//     */
+//    @Override
+//    public void pause() throws PauseableComponentException {
+//        this.pausedThreadPool = new PausedThreadPool(threadPool);
+//        pausedThreadPool.pause();
+//    }
+//
+//    /*
+//     * (non-Javadoc)
+//     *
+//     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#resume()
+//     */
+//    @Override
+//    public void resume() throws PauseableComponentException {
+//        this.pausedThreadPool.resume();
+//        this.pausedThreadPool = null;
+//
+//    }
 }
