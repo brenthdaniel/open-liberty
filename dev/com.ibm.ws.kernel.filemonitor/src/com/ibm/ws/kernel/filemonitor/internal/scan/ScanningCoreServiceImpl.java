@@ -20,12 +20,13 @@ import com.ibm.ws.kernel.LibertyProcess;
 import com.ibm.ws.kernel.filemonitor.FileNotification;
 import com.ibm.ws.kernel.filemonitor.internal.CoreServiceImpl;
 import com.ibm.ws.kernel.filemonitor.internal.MonitorHolder;
+import com.ibm.ws.kernel.launch.service.PauseableComponent;
 import com.ibm.wsspi.kernel.filemonitor.FileMonitor;
 
 /**
  * The traditional core service, used when we're below Java 1.7
  */
-@Component(configurationPolicy = ConfigurationPolicy.OPTIONAL, configurationPid = "com.ibm.ws.kernel.filemonitor", service = { FileNotification.class },
+@Component(configurationPolicy = ConfigurationPolicy.OPTIONAL, configurationPid = "com.ibm.ws.kernel.filemonitor", service = { FileNotification.class, PauseableComponent.class },
            property = { "service.vendor=IBM" })
 public class ScanningCoreServiceImpl extends CoreServiceImpl {
 

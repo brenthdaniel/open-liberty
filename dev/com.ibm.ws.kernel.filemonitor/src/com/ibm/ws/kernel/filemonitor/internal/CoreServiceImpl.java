@@ -12,6 +12,7 @@ package com.ibm.ws.kernel.filemonitor.internal;
 
 import java.io.File;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,8 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.kernel.filemonitor.FileNotification;
+import com.ibm.ws.kernel.launch.service.PauseableComponent;
+import com.ibm.ws.kernel.launch.service.PauseableComponentException;
 import com.ibm.wsspi.kernel.filemonitor.FileMonitor;
 import com.ibm.wsspi.kernel.service.location.WsLocationAdmin;
 import com.ibm.wsspi.kernel.service.utils.MetatypeUtils;
@@ -44,7 +47,8 @@ import com.ibm.wsspi.kernel.service.utils.PathUtils;
  * The two required references (WsLocationAdmin and ScheduledExecutorService) are dynamic, to allow
  * those services to be refreshed/replaced without recycling the component.
  */
-public abstract class CoreServiceImpl implements CoreService, FileNotification {
+public abstract class CoreServiceImpl implements CoreService, FileNotification, PauseableComponent {
+
     /**  */
     static final String MONITOR = "Monitor";
 
@@ -295,7 +299,7 @@ public abstract class CoreServiceImpl implements CoreService, FileNotification {
     @Override
     public FileMonitor getReferencedMonitor(ServiceReference<FileMonitor> monitorRef) {
         // This is done once per monitor: cached by the caller (MonitorHolder.init)
-        return (FileMonitor) cContext.locateService(MONITOR, monitorRef);
+        return cContext.locateService(MONITOR, monitorRef);
     }
 
     @Override
@@ -325,4 +329,72 @@ public abstract class CoreServiceImpl implements CoreService, FileNotification {
         for (MonitorHolder mh : fileMonitors.values())
             mh.externalScan(absoluteCreated, absoluteDeleted, absoluteModified);
     }
+
+    private boolean isPaused = false;
+    private final Object pauseLock = new Object();
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#getName()
+     */
+    @Override
+    public String getName() {
+        return getClass().getName();
+    }
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#pause()
+     */
+    @Override
+    public void pause() throws PauseableComponentException {
+        synchronized (pauseLock) {
+            isPaused = true;
+            for (MonitorHolder mh : fileMonitors.values()) {
+                mh.pause();
+            }
+        }
+
+    }
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#resume()
+     */
+    @Override
+    public void resume() throws PauseableComponentException {
+        synchronized (pauseLock) {
+            isPaused = false;
+            for (MonitorHolder mh : fileMonitors.values()) {
+                mh.resume();
+            }
+        }
+
+    }
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#isPaused()
+     */
+    @Override
+    public boolean isPaused() {
+        synchronized (pauseLock) {
+            return isPaused;
+        }
+    }
+
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.ws.kernel.launch.service.PauseableComponent#getExtendedInfo()
+     */
+    @Override
+    public HashMap<String, String> getExtendedInfo() {
+        return null;
+    }
+
 }

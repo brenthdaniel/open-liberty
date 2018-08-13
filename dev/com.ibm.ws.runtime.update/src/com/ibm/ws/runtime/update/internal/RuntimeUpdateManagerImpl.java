@@ -12,11 +12,12 @@ package com.ibm.ws.runtime.update.internal;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -41,6 +42,7 @@ import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.ffdc.annotation.FFDCIgnore;
+import com.ibm.ws.kernel.LibertyProcess;
 import com.ibm.ws.kernel.launch.service.ForcedServerStop;
 import com.ibm.ws.runtime.update.RuntimeUpdateListener;
 import com.ibm.ws.runtime.update.RuntimeUpdateManager;
@@ -84,6 +86,8 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
     };
 
     private WsLocationAdmin locationService;
+
+    private LibertyProcess libertyProcess;
 
     @Activate
     protected void activate(BundleContext ctx) {
@@ -137,6 +141,11 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
         this.locationService = null;
     }
 
+    @Reference(policy = ReferencePolicy.STATIC)
+    protected void setProcess(LibertyProcess process) {
+        this.libertyProcess = process;
+    }
+
     protected void cleanupNotifications() {
         synchronized (notifications) {
             // Check that all notifications are completed
@@ -163,14 +172,6 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
         private final FutureMonitor futureMonitor;
         private final AtomicBoolean waitForPendingNotifications;
         private final boolean ignoreOnQuiesce;
-
-        NotificationImpl(String name, Future<Boolean> future, FutureMonitor futureMonitor, AtomicBoolean waitForPendingNotifications) {
-            this.name = name;
-            this.future = future;
-            this.futureMonitor = futureMonitor;
-            this.waitForPendingNotifications = waitForPendingNotifications;
-            this.ignoreOnQuiesce = false;
-        }
 
         NotificationImpl(String name, Future<Boolean> future, FutureMonitor futureMonitor, AtomicBoolean waitForPendingNotifications, boolean ignoreQuiesce) {
             this.name = name;
@@ -316,42 +317,36 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
             return;
 
         // Thread pool for stopping bits of the server (so it doesn't compete with running work.. )
-        ExecutorService threadPool = Executors.newFixedThreadPool(3);
+        int shutdownThreadPoolSize = listenerRefs.size();
+        ExecutorService threadPool = Executors.newFixedThreadPool(shutdownThreadPoolSize);
 
         if (isServer())
             Tr.audit(tc, "quiesce.begin");
         else
             Tr.audit(tc, "client.quiesce.begin");
 
-        // Add one more for allowing existing config operations to finish
-        if (!existingNotifications.isEmpty()) {
-            threadPool.execute(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        for (RuntimeUpdateNotification notification : existingNotifications.values()) {
-                            if (!notification.ignoreOnQuiesce())
-                                notification.waitForCompletion();
-                        }
-                    } catch (Throwable t) {
-                        // Auto-FFDC here..
-                    }
-                }
-            });
-        }
+        // List to hold all of the Futures for quiesce work
+        final List<Future<Boolean>> futures = new ArrayList<Future<Boolean>>();
 
-        //Create list of threads to check who is alive in the case of a quiesce failure
-        final ConcurrentLinkedQueue<Thread> listeners = new ConcurrentLinkedQueue<Thread>();
+        // Add any outstanding RuntimeUpdateNotifiations to the list of futures to monitor
+        for (RuntimeUpdateNotification notification : existingNotifications.values()) {
+            if (!notification.ignoreOnQuiesce()) {
+                futures.add(notification.getFuture());
+            }
+        }
 
         // Queue the notification of each listener (unbounded queue)
         for (ServiceReference<ServerQuiesceListener> ref : listenerRefs) {
             final ServerQuiesceListener listener = bundleCtx.getService(ref);
             if (listener != null) {
+                final Future<Boolean> future = futureMonitor.createFuture(Boolean.class);
+
                 threadPool.execute(new Runnable() {
                     @Override
                     public void run() {
                         try {
-                            listeners.add(Thread.currentThread());
+                            futures.add(future);
+
                             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                                 Tr.debug(tc, "Invoking serverStopping() on listener: " + listener);
                             }
@@ -359,6 +354,7 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
                             if (TraceComponent.isAnyTracingEnabled() && tc.isDebugEnabled()) {
                                 Tr.debug(tc, "serverStopping() method completed on listener: " + listener);
                             }
+                            futureMonitor.setResult(future, true);
                         } catch (Throwable t) {
                             // Auto-FFDC here..
                         }
@@ -392,23 +388,7 @@ public class RuntimeUpdateManagerImpl implements RuntimeUpdateManager, Synchrono
                         Tr.debug(tc, "Notification is not done yet: " + notification);
                     }
                 }
-                // Check which threads are still alive
-                for (Thread t : listeners) {
-                    int liveThreads = 0;
-                    if (t.isAlive()) {
-                        liveThreads++;
-                        Tr.debug(tc, "For thread " + liveThreads + " the stack trace is as follows: ");
-                        StackTraceElement stackTrace[] = t.getStackTrace();
-                        int sizeOfStack = stackTrace.length;
-                        //Print the first several traces from the stack
-                        for (int i = 0; (i < sizeOfStack) || (i < 5); i++) {
-                            Tr.debug(tc, "\t \t at " + stackTrace[i].getMethodName() + "(" + stackTrace[i].getFileName() + "" + stackTrace[i].getLineNumber() + ")");
-                        }
-                        if (sizeOfStack >= 5) {
-                            Tr.debug(tc, "...");
-                        }
-                    }
-                }
+                libertyProcess.createJavaDump(Collections.singleton("thread"));
             }
 
             // we timed out - we now have to stop waiting for existing notifications to finish...

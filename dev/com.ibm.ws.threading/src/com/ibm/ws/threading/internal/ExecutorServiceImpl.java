@@ -22,6 +22,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
@@ -40,6 +41,7 @@ import org.osgi.service.component.annotations.ReferencePolicy;
 
 import com.ibm.websphere.ras.annotation.Trivial;
 import com.ibm.ws.kernel.service.util.CpuInfo;
+import com.ibm.wsspi.kernel.service.utils.ServerQuiesceListener;
 import com.ibm.wsspi.threading.ExecutorServiceTaskInterceptor;
 import com.ibm.wsspi.threading.WSExecutorService;
 
@@ -49,8 +51,8 @@ import com.ibm.wsspi.threading.WSExecutorService;
 @Component(name = "com.ibm.ws.threading",
            configurationPolicy = ConfigurationPolicy.REQUIRE,
            property = "service.vendor=IBM",
-           service = { java.util.concurrent.ExecutorService.class, com.ibm.wsspi.threading.WSExecutorService.class })
-public final class ExecutorServiceImpl implements WSExecutorService {
+           service = { java.util.concurrent.ExecutorService.class, com.ibm.wsspi.threading.WSExecutorService.class, ServerQuiesceListener.class })
+public final class ExecutorServiceImpl implements WSExecutorService, ServerQuiesceListener {
 
     /**
      * The target ExecutorService.
@@ -78,7 +80,7 @@ public final class ExecutorServiceImpl implements WSExecutorService {
      * Indicates whether any interceptors are currently being used. This is for performance
      * reasons, to avoid getting an iterator over an empty set for every task that is submitted.
      */
-    boolean interceptorsActive = false;
+    boolean interceptorsActive = true;
 
     /**
      * A Set of interceptors that are all given a chance to wrap tasks that are submitted
@@ -104,6 +106,8 @@ public final class ExecutorServiceImpl implements WSExecutorService {
      * The ThreadFactory used by the executor to create new threads.
      */
     ThreadFactory threadFactory = null;
+
+    private Boolean serverStopping = false;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL,
                policy = ReferencePolicy.DYNAMIC,
@@ -203,6 +207,66 @@ public final class ExecutorServiceImpl implements WSExecutorService {
 
         if (oldPool != null) {
             softShutdown(oldPool);
+        }
+    }
+
+    private class RunnableWrapper implements Runnable {
+
+        private final Runnable wrappedTask;
+
+        RunnableWrapper(Runnable r) {
+            this.wrappedTask = r;
+            phaser.register();
+//            outstandingTasks++;
+        }
+
+        /*
+         * (non-Javadoc)
+         *
+         * @see java.lang.Runnable#run()
+         */
+        @Override
+        public void run() {
+            try {
+                this.wrappedTask.run();
+            } finally {
+                phaser.arriveAndDeregister();
+                //              outstandingTasks--;
+            }
+        }
+
+    }
+
+    private final Phaser phaser = new Phaser(0);
+    //   private int outstandingTasks = 0;
+
+    private class CallableWrapper<T> implements Callable<T> {
+        private final Callable<T> callable;
+
+        CallableWrapper(Callable<T> c) {
+            this.callable = c;
+//            outstandingTasks++;
+            phaser.register();
+        }
+
+        /*
+         * (non-Javadoc)
+         *
+         * @see java.util.concurrent.Callable#call()
+         */
+        @Override
+        public T call() throws Exception {
+            try {
+                return this.callable.call();
+            } finally {
+                //           synchronized(serverStopping) {
+                //               if ( serverStopping )
+                //                  shutdownLatch.countDown();
+                //             else
+                //               outstandingTasks--;
+                phaser.arriveAndDeregister();
+                //         }
+            }
         }
     }
 
@@ -391,7 +455,11 @@ public final class ExecutorServiceImpl implements WSExecutorService {
         while (i.hasNext()) {
             r = i.next().wrap(r);
         }
-        return r;
+
+        if (serverStopping)
+            return r;
+
+        return new RunnableWrapper(r);
     }
 
     <T> Callable<T> wrap(Callable<T> c) {
@@ -399,15 +467,49 @@ public final class ExecutorServiceImpl implements WSExecutorService {
         while (i.hasNext()) {
             c = i.next().wrap(c);
         }
-        return c;
+
+        if (serverStopping)
+            return c;
+        return new CallableWrapper<T>(c);
     }
 
     private <T> Collection<? extends Callable<T>> wrap(Collection<? extends Callable<T>> tasks) {
         List<Callable<T>> wrappedTasks = new ArrayList<Callable<T>>();
         Iterator<? extends Callable<T>> i = tasks.iterator();
         while (i.hasNext()) {
-            wrappedTasks.add(wrap(i.next()));
+            Callable<T> c = wrap(i.next());
+            if (serverStopping)
+                wrappedTasks.add(c);
+            else
+                wrappedTasks.add(new CallableWrapper<T>(c));
         }
         return wrappedTasks;
     }
+
+//    private CountDownLatch shutdownLatch;
+    /*
+     * (non-Javadoc)
+     *
+     * @see com.ibm.wsspi.kernel.service.utils.ServerQuiesceListener#serverStopping()
+     */
+    @Override
+    public void serverStopping() {
+        //       synchronized (serverStopping) {
+        this.serverStopping = true;
+        //          shutdownLatch = new CountDownLatch(outstandingTasks);
+        //      }
+//        try {
+//            shutdownLatch.await(30, TimeUnit.SECONDS);
+//        } catch (InterruptedException e) {
+//           //FFDC
+//        }
+        try {
+            phaser.awaitAdvanceInterruptibly(0, 30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            //FFDC
+        } catch (TimeoutException e) {
+            //FFDC
+        }
+    }
+
 }

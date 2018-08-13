@@ -545,6 +545,19 @@ public abstract class MonitorHolder implements Runnable {
         return monitorState.get() == MonitorState.DESTROYED.ordinal();
     }
 
+    private boolean isPaused = false;
+
+    // No scanning (explicit or scheduled) will be performed while the monitor holder is paused
+    void pause() {
+        this.isPaused = true;
+        stop();
+    }
+
+    void resume() {
+        this.isPaused = false;
+        start();
+    }
+
     @Override
     public void run() {
         scheduledScan();
@@ -562,6 +575,10 @@ public abstract class MonitorHolder implements Runnable {
     @Trivial
     @FFDCIgnore(InterruptedException.class)
     void scheduledScan() {
+        // Don't perform a scheduled scan if this monitor holder is paused
+        if (isPaused)
+            return;
+
         // 152229: Changed this code to get the monitor type locally.  That is, now we save the monitor type in the constructor.
         // We used to get the monitor type here by monitorRef.getProperty(FileMonitor.MONITOR_TYPE)). That caused a
         // ConcurrentModificationException because of interference from the JMocked FileMonitor in the unit test code.
@@ -747,6 +764,10 @@ public abstract class MonitorHolder implements Runnable {
      * @param notifiedModified the canonical paths of any modified files
      */
     void externalScan(Set<File> notifiedCreated, Set<File> notifiedDeleted, Set<File> notifiedModified) {
+        // Don't perform the external scan if this monitor holder is paused
+        if (isPaused)
+            return;
+
         // only do anything if this is an 'external' monitor
         if (!!!FileMonitor.MONITOR_TYPE_EXTERNAL.equals(monitorRef.getProperty(FileMonitor.MONITOR_TYPE)))
             return;
