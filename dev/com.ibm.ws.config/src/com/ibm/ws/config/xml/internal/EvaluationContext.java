@@ -47,9 +47,12 @@ class EvaluationContext {
 
     private final VariableEvaluator variableEvaluator;
 
-    public EvaluationContext(RegistryEntry registryEntry, VariableEvaluator ve) {
+    private final ConfigEvaluator configEvaluator;
+
+    public EvaluationContext(ConfigEvaluator evaluator, RegistryEntry registryEntry, VariableEvaluator ve) {
         this.result = new EvaluationResult(registryEntry);
         this.variableEvaluator = ve;
+        this.configEvaluator = evaluator;
     }
 
     static class NestedInfo {
@@ -225,11 +228,36 @@ class EvaluationContext {
 
     /**
      * Tries to resolve variables.
-     * 
+     *
      * @throws ConfigEvaluatorException
      */
     public String resolveString(String value, boolean ignoreWarnings) throws ConfigEvaluatorException {
         value = variableEvaluator.resolveVariables(value, this, ignoreWarnings);
         return value;
+    }
+
+    /**
+     * @return
+     * @throws ConfigEvaluatorException
+     */
+    public Object resolveCurrentServicePid() throws ConfigEvaluatorException {
+        Object retValue = null;
+        try {
+            retValue = configEvaluator.getPid(getConfigElement().getConfigID());
+            putValue(XMLConfigConstants.CFG_SERVICE_PID, retValue);
+        } catch (ConfigNotFoundException ex) {
+            throw new ConfigEvaluatorException("Could not obtain PID for configID", ex);
+        }
+        return retValue;
+    }
+
+    public Object evaluateMetaTypeAttribute(String attributeName, EvaluationContext context, ExtendedAttributeDefinition attributeDef, String flatPrefix,
+                                            boolean ignoreWarnings) throws ConfigEvaluatorException {
+        return configEvaluator.evaluateMetaTypeAttribute(attributeName, context, attributeDef, flatPrefix, ignoreWarnings);
+    }
+
+    public Object evaluateSimpleAttribute(String attributeName, Object attributeValue, EvaluationContext context, String flatPrefix,
+                                          boolean ignoreWarnings) throws ConfigEvaluatorException {
+        return configEvaluator.evaluateSimpleAttribute(attributeName, attributeValue, context, flatPrefix, ignoreWarnings);
     }
 }

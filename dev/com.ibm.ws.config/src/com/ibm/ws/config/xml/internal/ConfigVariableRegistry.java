@@ -346,13 +346,26 @@ class ConfigVariableRegistry implements VariableRegistry, ConfigVariables {
         for (Map.Entry<String, ConfigVariable> entry : configVariables.entrySet()) {
             ConfigVariable var = entry.getValue();
             if (var.getValue() != null) {
-                userDefinedVariables.put(var.getName(), var.getValue());
+                String value = resolveFromAllSources(var.getValue());
+                userDefinedVariables.put(var.getName(), value);
             }
         }
         for (CommandLineVariable clVar : commandLineVariables) {
-            userDefinedVariables.put(clVar.getName(), clVar.getValue());
+            String value = resolveFromAllSources(clVar.getValue());
+            userDefinedVariables.put(clVar.getName(), value);
         }
         return userDefinedVariables;
+    }
+
+    /**
+     * Resolve a variable according to configuration rules. This is only intended for use in producing
+     * the "user defined variables" list. It allows us to return environment variables
+     * 
+     * @param value
+     * @return
+     */
+    private String resolveFromAllSources(String value) {
+
     }
 
     /**
@@ -374,7 +387,8 @@ class ConfigVariableRegistry implements VariableRegistry, ConfigVariables {
         for (Map.Entry<String, ConfigVariable> entry : configVariables.entrySet()) {
             ConfigVariable var = entry.getValue();
             if (var.getValue() == null && var.getDefaultValue() != null) {
-                userDefinedVariables.put(var.getName(), var.getDefaultValue());
+                String value = resolveFromAllSources(var.getDefaultValue());
+                userDefinedVariables.put(var.getName(), value);
             }
         }
         return userDefinedVariables;

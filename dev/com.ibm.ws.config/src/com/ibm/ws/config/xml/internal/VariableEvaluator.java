@@ -28,15 +28,9 @@ public class VariableEvaluator {
 
     private final ConfigVariableRegistry variableRegistry;
     private final StringUtils stringUtils = new StringUtils();
-    private final ConfigEvaluator configEvaluator;
 
-    /**
-     * @param variableRegistry
-     * @param configEvaluator
-     */
-    public VariableEvaluator(ConfigVariableRegistry variableRegistry, ConfigEvaluator configEvaluator) {
+    public VariableEvaluator(ConfigVariableRegistry variableRegistry) {
         this.variableRegistry = variableRegistry;
-        this.configEvaluator = configEvaluator;
     }
 
     private String lookupVariableFromRegistry(String variableName) {
@@ -96,12 +90,7 @@ public class VariableEvaluator {
             // get it from cache
             realValue = context.getValue(variable);
         } else if (XMLConfigConstants.CFG_SERVICE_PID.equals(variable)) {
-            try {
-                realValue = configEvaluator.getPid(context.getConfigElement().getConfigID());
-                context.putValue(XMLConfigConstants.CFG_SERVICE_PID, realValue);
-            } catch (ConfigNotFoundException ex) {
-                throw new ConfigEvaluatorException("Could not obtain PID for configID", ex);
-            }
+            realValue = context.resolveCurrentServicePid();
         } else {
             // evaluate the variable
 
@@ -124,7 +113,7 @@ public class VariableEvaluator {
                         Set<NestedInfo> nestedInfo = context.getNestedInfo();
                         String flatPrefix = "";
                         try {
-                            realValue = configEvaluator.evaluateMetaTypeAttribute(variable, context, attributeDef, flatPrefix, ignoreWarnings);
+                            realValue = context.evaluateMetaTypeAttribute(variable, context, attributeDef, flatPrefix, ignoreWarnings);
                         } finally {
                             context.setAttributeName(currentAttribute);
                             context.setNestedInfo(nestedInfo);
@@ -139,7 +128,7 @@ public class VariableEvaluator {
                             String currentAttribute = context.getAttributeName();
                             Set<NestedInfo> nestedInfo = context.getNestedInfo();
                             try {
-                                realValue = configEvaluator.evaluateSimpleAttribute(variable, rawValue, context, "", ignoreWarnings);
+                                realValue = context.evaluateSimpleAttribute(variable, rawValue, context, "", ignoreWarnings);
                             } finally {
                                 context.setAttributeName(currentAttribute);
                                 context.setNestedInfo(nestedInfo);
@@ -156,7 +145,7 @@ public class VariableEvaluator {
                         for (Map.Entry<String, ExtendedAttributeDefinition> entry : attributeMap.entrySet()) {
                             if (!context.isProcessed(entry.getKey()) && entry.getValue().isFlat()) {
                                 try {
-                                    configEvaluator.evaluateMetaTypeAttribute(entry.getKey(), context, entry.getValue(), "", true);
+                                    context.evaluateMetaTypeAttribute(entry.getKey(), context, entry.getValue(), "", true);
                                 } catch (ConfigEvaluatorException ex) {
                                     // Ignore -- errors should be generated during main line processing
                                 }
@@ -201,7 +190,7 @@ public class VariableEvaluator {
     /**
      * Attempt to evaluate a variable expression.
      *
-     * @param expr the expression string (for example, "x+0")
+     * @param expr    the expression string (for example, "x+0")
      * @param context the context for evaluation
      * @return the result, or null if evaluation fails
      */
@@ -287,7 +276,7 @@ public class VariableEvaluator {
                 // Try a metatype attribute
                 ExtendedAttributeDefinition targetAttrDef = context.getAttributeDefinition(variableName);
                 if (targetAttrDef != null) {
-                    variableValue = configEvaluator.evaluateMetaTypeAttribute(variableName, context, targetAttrDef, "", true);
+                    variableValue = context.evaluateMetaTypeAttribute(variableName, context, targetAttrDef, "", true);
                 }
             }
 

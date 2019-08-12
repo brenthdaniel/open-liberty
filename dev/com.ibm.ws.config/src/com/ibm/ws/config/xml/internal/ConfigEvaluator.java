@@ -59,7 +59,6 @@ class ConfigEvaluator {
 
     private final ConfigRetriever configRetriever;
     private final MetaTypeRegistry metatypeRegistry;
-//    private final ConfigVariableRegistry variableRegistry;
     private final ServerXMLConfiguration serverXMLConfig;
 
     private final VariableEvaluator variableEvaluator;
@@ -68,7 +67,7 @@ class ConfigEvaluator {
         this.configRetriever = retriever;
         this.metatypeRegistry = metatypeRegistry;
         this.serverXMLConfig = serverXmlConfig;
-        this.variableEvaluator = new VariableEvaluator(variableRegistry, this);
+        this.variableEvaluator = new VariableEvaluator(variableRegistry);
     }
 
     private Object evaluateSimple(Object rawValue, EvaluationContext context, boolean ignoreWarnings) throws ConfigEvaluatorException {
@@ -273,10 +272,10 @@ class ConfigEvaluator {
     /**
      * Find everything in the context related to the AD and evaluate it.
      *
-     * @param attributeName name used in context for this AD: may differ from ad.getId() due to renames.(???)
-     * @param context evaluation context for ocd
-     * @param attributeDef AD
-     * @param flatPrefix prefix from nested flattening
+     * @param attributeName  name used in context for this AD: may differ from ad.getId() due to renames.(???)
+     * @param context        evaluation context for ocd
+     * @param attributeDef   AD
+     * @param flatPrefix     prefix from nested flattening
      * @param ignoreWarnings
      * @return
      * @throws ConfigEvaluatorException
@@ -1345,7 +1344,7 @@ class ConfigEvaluator {
      *
      * This method will resolve any variables in the ref attribute and return a new ConfigElement.Reference if anything changed.
      *
-     * @param reference The ConfigElement reference. Contains the element name and the ref attribute value
+     * @param reference      The ConfigElement reference. Contains the element name and the ref attribute value
      * @param context
      * @param ignoreWarnings
      * @return
@@ -1433,10 +1432,10 @@ class ConfigEvaluator {
      * element. If this service pid has not been seen yet in this context, the pid value will be returned. Otherwise,
      * the method returns null.
      *
-     * @param childElement The nested element
+     * @param childElement    The nested element
      * @param parentAttribute The AttributeDefinition on the parent that points to the nested element. Null for child-first
-     * @param context The current context
-     * @param index the attribute index
+     * @param context         The current context
+     * @param index           the attribute index
      * @return the pid, or null if the element should be ignored
      * @throws ConfigEvaluatorException
      */
@@ -1970,7 +1969,8 @@ class ConfigEvaluator {
         }
 
         @Override
-        public void reportError() {}
+        public void reportError() {
+        }
 
         /*
          * (non-Javadoc)
@@ -2036,7 +2036,8 @@ class ConfigEvaluator {
         }
 
         @Override
-        public void reportError() {}
+        public void reportError() {
+        }
 
         /*
          * (non-Javadoc)
