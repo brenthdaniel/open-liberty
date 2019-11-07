@@ -507,10 +507,18 @@ goto:eof
 
   @REM Command-line parsing of -Xshareclasses does not allow "," in cacheDir.
   if "!WLP_OUTPUT_DIR:,=!" == "!WLP_OUTPUT_DIR!" (
-    set SERVER_IBM_JAVA_OPTIONS=-Xshareclasses:name=liberty-%%u,nonfatal,cacheDir="%WLP_OUTPUT_DIR%\.classCache" -XX:ShareClassesEnableBCI -Xscmx80m !OPENJ9_JAVA_OPTIONS!
+    @REM Skip if Xshareclasses is defined in IBM_JAVA_OPTIONS
+    if "!IBM_JAVA_OPTIONS:Xshareclasses=!" == "!IBM_JAVA_OPTIONS!" (  
+      set SERVER_IBM_JAVA_OPTIONS=-Xshareclasses:name=liberty-%%u,nonfatal,cacheDir="%WLP_OUTPUT_DIR%\.classCache" -XX:ShareClassesEnableBCI -Xscmx80m !OPENJ9_JAVA_OPTIONS!
+    ) else if not defined OPENJ9_JAVA_OPTIONS (
+      set SERVER_IBM_JAVA_OPTIONS=-Xshareclasses:name=liberty-%%u,nonfatal,cacheDir="%WLP_OUTPUT_DIR%\.classCache" -XX:ShareClassesEnableBCI -Xscmx80m
+    ) else (
+      set SERVER_IBM_JAVA_OPTIONS=!OPENJ9_JAVA_OPTIONS!
+    )
   ) else (
     set SERVER_IBM_JAVA_OPTIONS=!OPENJ9_JAVA_OPTIONS!
   )
+
 
   @REM Add -Xquickstart -Xnoaot for client JVMs only.  AOT is ineffective if
   @REM JVMs have conflicting options, and it's more important that server JVMs

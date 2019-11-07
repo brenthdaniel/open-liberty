@@ -574,17 +574,21 @@ serverEnvDefaults()
     fi
   fi
 
-  # Command-line parsing of -Xshareclasses does not allow "," in cacheDir.
+ # Command-line parsing of -Xshareclasses does not allow "," in cacheDir.
   case ${WLP_OUTPUT_DIR} in
   *,*)
     SERVER_IBM_JAVA_OPTIONS=${OPENJ9_JAVA_OPTIONS}
     ;;
   *)
-    if $shareclassesCacheDirPerm
-    then
-      SERVER_IBM_JAVA_OPTIONS="-Xshareclasses:name=liberty-%u,nonfatal,cacheDir=\"${WLP_OUTPUT_DIR}/.classCache\",cacheDirPerm=1000 -XX:ShareClassesEnableBCI -Xscmx80m ${OPENJ9_JAVA_OPTIONS}"
+    if grep -q "Xshareclasses" <<< "${OPENJ9_JAVA_OPTIONS}"; then
+      if $shareclassesCacheDirPerm
+      then
+        SERVER_IBM_JAVA_OPTIONS="-Xshareclasses:name=liberty-%u,nonfatal,cacheDir=\"${WLP_OUTPUT_DIR}/.classCache\",cacheDirPerm=1000 -XX:ShareClassesEnableBCI -Xscmx80m ${OPENJ9_JAVA_OPTIONS}"
+      else
+        SERVER_IBM_JAVA_OPTIONS="-Xshareclasses:name=liberty-%u,nonfatal,cacheDir=\"${WLP_OUTPUT_DIR}/.classCache\" -XX:ShareClassesEnableBCI -Xscmx80m ${OPENJ9_JAVA_OPTIONS}"
+      fi
     else
-      SERVER_IBM_JAVA_OPTIONS="-Xshareclasses:name=liberty-%u,nonfatal,cacheDir=\"${WLP_OUTPUT_DIR}/.classCache\" -XX:ShareClassesEnableBCI -Xscmx80m ${OPENJ9_JAVA_OPTIONS}"
+      SERVER_IBM_JAVA_OPTIONS=${OPENJ9_JAVA_OPTIONS}
     fi
   esac
 
