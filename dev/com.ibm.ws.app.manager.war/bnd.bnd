@@ -41,7 +41,7 @@ instrument.classesExcludes: com/ibm/ws/app/manager/war/internal/resources/*.clas
 	com.ibm.ws.adaptable.module;version=latest,\
 	com.ibm.ws.app.manager;version=latest,\
 	com.ibm.ws.app.manager.module;version=latest,\
-    com.ibm.ws.anno;version=latest,\
+	com.ibm.ws.anno;version=latest,\
 	com.ibm.ws.artifact;version=latest,\
 	com.ibm.ws.artifact.zip;version=latest,\
 	com.ibm.ws.javaee.dd;version=latest,\
@@ -49,13 +49,15 @@ instrument.classesExcludes: com/ibm/ws/app/manager/war/internal/resources/*.clas
 	com.ibm.ws.kernel.service,\
 	com.ibm.ws.logging.core,\
 	com.ibm.websphere.org.osgi.core,\
+	com.ibm.websphere.org.osgi.service.cm;version=latest,\
 	com.ibm.websphere.org.osgi.service.component,\
 	com.ibm.wsspi.org.osgi.service.component.annotations,\
 	com.ibm.ws.threading,\
 	com.ibm.ws.container.service;version=latest,\
 	com.ibm.ws.classloading;version=latest,\
 	com.ibm.ws.javaee.ddmodel;version=latest,\
-	com.ibm.ws.javaee.dd.common;version=latest
+	com.ibm.ws.javaee.dd.common;version=latest,\
+	com.ibm.wsspi.org.osgi.service.cm
 
 -testpath: \
 	../build.sharedResources/lib/junit/old/junit.jar;version=file, \

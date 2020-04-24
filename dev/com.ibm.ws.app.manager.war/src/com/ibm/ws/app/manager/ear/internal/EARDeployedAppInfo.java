@@ -24,7 +24,10 @@ import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
+import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceRegistration;
+import org.osgi.service.cm.Configuration;
+import org.osgi.service.cm.ConfigurationAdmin;
 
 import com.ibm.websphere.ras.Tr;
 import com.ibm.websphere.ras.TraceComponent;
@@ -127,6 +130,8 @@ public class EARDeployedAppInfo extends DeployedAppInfoBase {
     // class loaders.
 
     private static final List<String> DYNAMIC_IMPORTS = Collections.unmodifiableList(Arrays.asList("*"));
+
+    private static final String WEB_EXTENSIONS_ELEMENT = "web-ext";
 
     private ClassLoader basicCreateAppClassLoader() {
         String appPrefix;
@@ -696,14 +701,55 @@ public class EARDeployedAppInfo extends DeployedAppInfoBase {
         }
     }
 
+    private String stripExtension(String moduleName) {
+        if (moduleName == null)
+            return null;
+
+        if (moduleName.endsWith(".war") || moduleName.endsWith(".jar")) {
+            return moduleName.substring(0, moduleName.length() - 4);
+        }
+        return moduleName;
+    }
+
     private void createModule(Module ddModule, Set<String> uniqueModuleURIs) {
         String modulePath = ddModule.getModulePath();
 
         final ModuleHandler moduleHandler;
         final String moduleTypeTag;
-        final String contextRoot;
+        String contextRoot = ddModule.getContextRoot();
         if (ddModule.getModuleType() == Module.TYPE_WEB) {
-            contextRoot = ContextRootUtil.getContextRoot(ddModule.getContextRoot());
+            Object webExtConfig = applicationInformation.getConfigProperty(WEB_EXTENSIONS_ELEMENT);
+            if (webExtConfig != null) {
+                String[] pids = (String[]) webExtConfig;
+                for (String webExt : pids) {
+                    ConfigurationAdmin ca = deployedAppServices.getConfigurationAdmin();
+                    try {
+                        Configuration[] configs = ca.listConfigurations("(service.pid=" + webExt + ")");
+                        if (configs != null) {
+                            for (Configuration config : configs) {
+                                String moduleName = stripExtension((String) config.getProperties().get("moduleName"));
+                                if (moduleName != null && moduleName.equalsIgnoreCase(stripExtension(modulePath))) {
+                                    String ctx = (String) config.getProperties().get("context-root");
+                                    if (ctx != null) {
+                                        contextRoot = ctx;
+                                        System.out.println("overriding context root");
+                                    }
+
+                                }
+
+                                System.out.println(moduleName);
+                                System.out.println(ddModule.getModulePath());
+                            }
+                        }
+
+                    } catch (InvalidSyntaxException ex) {
+                        // auto ffdc
+                    } catch (IOException e) {
+                        //auto ffdc
+                    }
+                }
+            }
+            contextRoot = ContextRootUtil.getContextRoot(contextRoot);
             moduleHandler = webModuleHandler;
             moduleTypeTag = "web";
             if (_tc.isDebugEnabled()) {
